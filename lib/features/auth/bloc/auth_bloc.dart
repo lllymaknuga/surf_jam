@@ -15,7 +15,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   AuthBloc(AuthRepository repository)
       : _repository = repository,
-        super(const InitialAuthState()) {
+        super(const LoadingAuthState()) {
     on<LoginAuthEvent>(_onLogin);
     on<CheckAuthEvent>(_onCheck);
     on<LogOutAuthEvent>(_onLogOut);
@@ -26,6 +26,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       emit(const LoadingAuthState());
       TokenDto token = await _repository.signIn(
           login: event.login, password: event.password);
+      _tokenStorage.writeToken(token);
       emit(AuthenticatedAuthState(token: token));
     } catch (e) {
       // TODO: error handle(For example Sentry)
@@ -36,7 +37,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   Future<void> _onCheck(CheckAuthEvent event, Emitter emit) async {
     emit(const LoadingAuthState());
     String? token = await _tokenStorage.readToken();
-    if (token.runtimeType is String) {
+    if (token.runtimeType == String) {
       TokenDto tokenDto = TokenDto(token: token as String);
       emit(AuthenticatedAuthState(token: tokenDto));
     } else {

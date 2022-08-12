@@ -1,3 +1,4 @@
+import 'package:latlong2/latlong.dart';
 import 'package:surf_practice_chat_flutter/features/chat/exceptions/invalid_message_exception.dart';
 import 'package:surf_practice_chat_flutter/features/chat/exceptions/user_not_found_exception.dart';
 import 'package:surf_practice_chat_flutter/features/chat/models/chat_geolocation_geolocation_dto.dart';
@@ -31,7 +32,8 @@ abstract class IChatRepository {
   ///
   /// [message] mustn't be empty and longer than [maxMessageLength]. Throws an
   /// [InvalidMessageException].
-  Future<Iterable<ChatMessageDto>> sendMessage(String message);
+  Future<Iterable<ChatMessageDto>> sendMessage(String message, LatLng? position,
+      List<String>? images);
 
   /// Sends the message by [location] contents. [message] is optional.
   ///
@@ -73,11 +75,14 @@ class ChatRepository implements IChatRepository {
   }
 
   @override
-  Future<Iterable<ChatMessageDto>> sendMessage(String message) async {
+  Future<Iterable<ChatMessageDto>> sendMessage(String message, LatLng? position,
+      List<String>? images) async {
     if (message.length > IChatRepository.maxMessageLength) {
       throw InvalidMessageException('Message "$message" is too large.');
     }
-    await _studyJamClient.sendMessage(SjMessageSendsDto(text: message));
+    List<double> ? geoPoint = position == null ? null : [position.latitude, position.longitude];
+    await _studyJamClient.sendMessage(SjMessageSendsDto(
+      text: message, images: images, geopoint: geoPoint));
 
     final messages = await _fetchAllMessages();
 
@@ -125,7 +130,8 @@ class ChatRepository implements IChatRepository {
     // API-request limitations, we can't load everything at one request, so
     // we're doing it in cycle.
     while (!isLimitBroken) {
-      final batch = await _studyJamClient.getMessages(lastMessageId: lastMessageId, limit: 10000);
+      final batch = await _studyJamClient.getMessages(
+          lastMessageId: lastMessageId, limit: 10000);
       messages.addAll(batch);
       lastMessageId = batch.last.chatId;
       if (batch.length < 10000) {
@@ -138,24 +144,26 @@ class ChatRepository implements IChatRepository {
     for (final message in messages) {
       messagesWithUsers[message.id] = message.userId;
     }
-    final users = await _studyJamClient.getUsers(messagesWithUsers.values.toSet().toList());
+    final users = await _studyJamClient
+        .getUsers(messagesWithUsers.values.toSet().toList());
     final localUser = await _studyJamClient.getUser();
 
-    return messages
-        .map(
-          (sjMessageDto) => sjMessageDto.geopoint == null
-              ? ChatMessageDto.fromSJClient(
-                  sjMessageDto: sjMessageDto,
-                  sjUserDto: users.firstWhere((userDto) => userDto.id == sjMessageDto.userId),
-                  isUserLocal:
-                      users.firstWhere((userDto) => userDto.id == sjMessageDto.userId).id ==
-                          localUser?.id,
-                )
-              : ChatMessageGeolocationDto.fromSJClient(
-                  sjMessageDto: sjMessageDto,
-                  sjUserDto: users.firstWhere((userDto) => userDto.id == sjMessageDto.userId),
-                ),
-        )
-        .toList();
+    return messages.map(
+          (sjMessageDto) {
+        return ChatMessageDto.fromSJClient(
+          images: sjMessageDto.images,
+          location: sjMessageDto.geopoint == null
+              ? null
+              : ChatGeolocationDto.fromGeoPoint(sjMessageDto.geopoint!),
+          sjMessageDto: sjMessageDto,
+          sjUserDto:
+          users.firstWhere((userDto) => userDto.id == sjMessageDto.userId),
+          isUserLocal: users
+              .firstWhere((userDto) => userDto.id == sjMessageDto.userId)
+              .id ==
+              localUser?.id,
+        );
+      },
+    ).toList();
   }
 }

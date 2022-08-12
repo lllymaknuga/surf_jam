@@ -7,10 +7,6 @@ abstract class AuthState extends Equatable {
   List<Object?> get props => [];
 }
 
-class InitialAuthState extends AuthState {
-  const InitialAuthState();
-}
-
 class UnknownAuthState extends AuthState {
   const UnknownAuthState();
 }
